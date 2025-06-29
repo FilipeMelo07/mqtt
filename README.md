@@ -29,6 +29,59 @@ O objetivo deste projeto é demonstrar o uso do protocolo MQTT para comunicaçã
 
 ---
 
+##  Análise do Código (Pontos-Chave)
+
+O funcionamento do projeto se concentra em alguns pontos críticos no arquivo `app_main.c`.
+
+
+### O "Cérebro" da Comunicação: `mqtt_event_handler`
+Esta função é o coração da lógica MQTT. Ela é chamada automaticamente sempre que ocorre um evento relacionado à conexão.
+
+#### 1. Conexão e Inscrição no Tópico (`MQTT_EVENT_CONNECTED`)
+```c
+case MQTT_EVENT_CONNECTED:
+    ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+    const char* led_topic = "/ifpe/ads/embarcados/esp32/led";
+    msg_id = esp_mqtt_client_subscribe(client, led_topic, 1);
+    break;
+```
+Assim que o ESP32 se conecta com sucesso ao broker Mosquitto, este trecho de código é executado. Ele imediatamente envia um comando para se inscrever no tópico `/ifpe/ads/embarcados/esp32/led`. A partir deste momento, o broker sabe que deve encaminhar todas as mensagens deste tópico para o nosso ESP32.
+
+#### 2. Recebimento e Processamento dos Dados (`MQTT_EVENT_DATA`)
+```c
+case MQTT_EVENT_DATA:
+    // ...
+    if (strncmp(event->topic, "/ifpe/ads/embarcados/esp32/led", event->topic_len) == 0) {
+        if (strncmp(event->data, "1", event->data_len) == 0) {
+            gpio_set_level(LED_PIN, 1); // Acende o LED
+        } else if (strncmp(event->data, "0", event->data_len) == 0) {
+            gpio_set_level(LED_PIN, 0); // Apaga o LED
+        }
+    }
+    break;
+```
+Este é o bloco de código mais importante para a funcionalidade do projeto. Quando uma mensagem MQTT chega:
+* **Primeiro `if`**: Ele verifica se o tópico da mensagem recebida é exatamente o tópico que nos interessa.
+* **Segundo `if/else if`**: Ele compara o conteúdo da mensagem (o payload). Se o conteúdo for a string `"1"`, ele chama a função `gpio_set_level` para acender o LED. Se for `"0"`, ele chama a mesma função para apagar o LED.
+
+### Orquestrador Principal: `app_main`
+```c
+void app_main(void)
+{
+    // ... inicializações ...
+
+    ESP_ERROR_CHECK(example_connect()); // Conecta ao Wi-Fi
+    configure_led();                    // Configura o pino do LED como saída
+    mqtt_app_start();                   // Inicia o cliente MQTT
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+```
+Esta é a função de entrada da aplicação. Ela executa a sequência de inicialização na ordem correta: primeiro conecta ao Wi-Fi, depois prepara o hardware (o pino do LED) e, finalmente, inicia o cliente MQTT que ficará rodando em segundo plano. O loop `while(1)` no final é crucial para garantir que a tarefa principal não termine, mantendo o sistema estável.
+
+
 ## Como Executar o Projeto
 
 Siga os passos abaixo para compilar e executar o projeto.
